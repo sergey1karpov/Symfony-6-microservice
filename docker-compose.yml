@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+
+  #PHP Service
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/php/Dockerfile
+    container_name: app
+    volumes:
+      - ./:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    networks:
+      postgres:
+
+  #Nginx Service
+  webserver:
+    image: nginx:alpine
+    container_name: webserver
+    restart: unless-stopped
+    tty: true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./:/var/www
+      - ./docker/nginx/conf.d/:/etc/nginx/conf.d/
+    networks:
+      - postgres
+
+  #PostgreSQL
+  postgres:
+    container_name: postgres
+    image: postgres
+    hostname: postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      PGDATA: /data/postgres
+    volumes:
+      - postgres:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres
+    restart: unless-stopped
+
+  #Admin panel postgres
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+    volumes:
+      - pgadmin:/root/.pgadmin
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    networks:
+      - postgres
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  #MailHog
+  mailhog:
+    image: mailhog/mailhog
+    container_name: mailhog
+    ports:
+      - "1025:1025" # smtp server
+      - "8025:8025" # web ui
+    networks:
+      - postgres
+
+  #RabbitMQ
+  rabbit:
+    image: "rabbitmq:3-management"
+    container_name: rabbitmq
+    hostname: "rabbit"
+    environment:
+      RABBITMQ_ERLANG_COOKIE: "SWQOKODSQALRPCLNMEQG"
+      RABBITMQ_DEFAULT_USER: "rabbitmq"
+      RABBITMQ_DEFAULT_PASS: "rabbitmq"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    networks:
+      - postgres
+
+#Docker Networks
+
+###> doctrine/doctrine-bundle ###
+  database:
+    image: postgres:${POSTGRES_VERSION:-15}-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      # You should definitely change the password in production
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-!ChangeMe!}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+    volumes:
+      - database_data:/var/lib/postgresql/data:rw
+      # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
+      # - ./docker/db/data:/var/lib/postgresql/data:rw
+###< doctrine/doctrine-bundle ###
+networks:
+  postgres:
+
+volumes:
+  postgres:
+  pgadmin:
+###> doctrine/doctrine-bundle ###
+  database_data:
+###< doctrine/doctrine-bundle ###
