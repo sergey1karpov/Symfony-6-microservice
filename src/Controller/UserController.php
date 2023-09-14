@@ -16,10 +16,11 @@ class UserController extends AbstractController
         private EntityManagerInterface $entityManager,
     ) {}
 
-    #[Route('/add-money', name: 'blog_list')]
+    #[Route('/api/v1/add-money', name: 'add-money', methods: ['POST'])]
     public function addBalance(Request $request, LoggerInterface $logger): Response
     {
-        $user = $request->get('userId');
+
+        $user = $request->get('user_id');
 
         $money = $request->get('money');
 
