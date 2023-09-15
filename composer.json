@@ -10,10 +10,12 @@
         "doctrine/doctrine-bundle": "^2.10",
         "doctrine/doctrine-migrations-bundle": "^3.2",
         "doctrine/orm": "^2.16",
+        "monolog/monolog": "^3.4",
         "symfony/console": "6.3.*",
         "symfony/dotenv": "6.3.*",
         "symfony/flex": "^2",
         "symfony/framework-bundle": "6.3.*",
+        "symfony/monolog-bundle": "^3.8",
         "symfony/runtime": "6.3.*",
         "symfony/yaml": "6.3.*"
     },
