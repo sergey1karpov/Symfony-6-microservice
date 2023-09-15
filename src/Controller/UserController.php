@@ -14,9 +14,7 @@ use Symfony\Component\Routing\Annotation\Route;
 
 class UserController extends AbstractController
 {
-    public function __construct(
-        private EntityManagerInterface $entityManager,
-    ) {}
+    public function __construct(private EntityManagerInterface $entityManager) {}
 
     #[Route('/api/v1/add-money', name: 'add-money')]
     public function addBalance(Request $request, LoggerInterface $logger): Response
@@ -60,21 +58,19 @@ class UserController extends AbstractController
         $recipient_id = $request->get('recipient_id');
         $money        = $request->get('money');
 
-        $senderWallet    = $this->entityManager->getRepository(UserBalance::class)
+        $senderWallet = $this->entityManager->getRepository(UserBalance::class)
             ->findOneBy(['user_id' => $sender_id]);
         $recipientWallet = $this->entityManager->getRepository(UserBalance::class)
             ->findOneBy(['user_id' => $recipient_id]);
 
-        if ($senderWallet->getBalance() == 0) {
-            return new Response(
-                'There is not enough money in your account',
-                Response::HTTP_BAD_REQUEST
-            );
+        if(!$senderWallet || !$recipientWallet) {
+            throw new NotFoundHttpException('User not found');
         }
 
-        if ($senderWallet->getBalance() < $money) {
+        if ($senderWallet->getBalance() == 0 || $senderWallet->getBalance() < $money) {
+            $logger->info('FAIL!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id);
             return new Response(
-                'There is too little money in your account',
+                'There is not enough money in your account. Top up your account.',
                 Response::HTTP_BAD_REQUEST
             );
         }
@@ -84,13 +80,14 @@ class UserController extends AbstractController
         try {
             $senderWallet->setBalance($senderWallet->getBalance() - $money);
             $recipientWallet->setBalance($recipientWallet->getBalance() + $money);
-
             $this->entityManager->flush();
             $this->entityManager->commit();
         } catch (\Exception $e) {
             $this->entityManager->rollback();
             throw $e;
         }
+
+        $logger->info('OK!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id);
 
         return new Response(
             'User with id ' . $sender_id . ' transferred ' . $money . ' rubles to user with id ' . $recipient_id,
