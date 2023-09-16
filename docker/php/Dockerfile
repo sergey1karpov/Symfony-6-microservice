@@ -23,6 +23,10 @@ RUN apt-get update && apt-get install -y \
     git \
     curl
 
+RUN apt-get install -y librabbitmq-dev libssl-dev
+RUN pecl install amqp
+RUN docker-php-ext-enable amqp
+
 RUN docker-php-ext-install gd
 
 RUN docker-php-ext-install sockets

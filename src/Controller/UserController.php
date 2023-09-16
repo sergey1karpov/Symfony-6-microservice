@@ -3,6 +3,8 @@
 namespace App\Controller;
 
 use App\Entity\UserBalance;
+use App\Message\AddMoneyToBalanceNotification;
+use App\Message\TransferMoneyNotification;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -10,6 +12,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Annotation\Route;
 
 class UserController extends AbstractController
@@ -17,12 +20,13 @@ class UserController extends AbstractController
     public function __construct(private EntityManagerInterface $entityManager) {}
 
     #[Route('/api/v1/add-money', name: 'add-money')]
-    public function addBalance(Request $request, LoggerInterface $logger): Response
+    public function addBalance(Request $request, MessageBusInterface $bus): Response
     {
         $user  = $request->get('user_id');
         $money = $request->get('money');
 
-        $balance = $this->entityManager->getRepository(UserBalance::class)->findOneBy(['user_id' => $user]);
+        $balance = $this->entityManager->getRepository(UserBalance::class)
+            ->findOneBy(['user_id' => $user]);
 
         if (!$balance) {
             try {
@@ -32,12 +36,14 @@ class UserController extends AbstractController
                 $this->entityManager->persist($userBalance);
                 $this->entityManager->flush();
             } catch (\Exception $e) {
-                $logger->error(
+                $bus->dispatch(new AddMoneyToBalanceNotification(
                     'User with id' . $user . ' couldn\'t top up my balance on ' . $money . ' because: ' . $e->getMessage()
-                );
+                ));
             }
 
-            $logger->info('user with id' . $user . ' topped up balance with ' . $money);
+            $bus->dispatch(new AddMoneyToBalanceNotification(
+                'User with id' . $user . ' topped up balance with ' . $money
+            ));
         } else {
             $currentBalance = $balance->getBalance();
             $newBalance = $balance->setBalance($money + $currentBalance);
@@ -45,14 +51,16 @@ class UserController extends AbstractController
             $this->entityManager->persist($newBalance);
             $this->entityManager->flush();
 
-            $logger->info('User with id' . $user . ' topped up balance with ' . $money);
+            $bus->dispatch(new AddMoneyToBalanceNotification(
+                'User with id' . $user . ' topped up balance with ' . $money
+            ));
         }
 
         return new Response('Balance replenished by ' . $money, Response::HTTP_OK);
     }
 
     #[Route('/api/v1/transfer-money', name: 'transfer-money')]
-    public function sendMoneyFromUserToUser(Request $request, LoggerInterface $logger): Response
+    public function sendMoneyFromUserToUser(Request $request, LoggerInterface $logger, MessageBusInterface $bus): Response
     {
         $sender_id    = $request->get('sender_id');
         $recipient_id = $request->get('recipient_id');
@@ -68,7 +76,10 @@ class UserController extends AbstractController
         }
 
         if ($senderWallet->getBalance() == 0 || $senderWallet->getBalance() < $money) {
-            $logger->info('FAIL!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id);
+            $bus->dispatch(new TransferMoneyNotification(
+                'FAIL!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id
+            ));
+
             return new Response(
                 'There is not enough money in your account. Top up your account.',
                 Response::HTTP_BAD_REQUEST
@@ -87,7 +98,9 @@ class UserController extends AbstractController
             throw $e;
         }
 
-        $logger->info('OK!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id);
+        $bus->dispatch(new TransferMoneyNotification(
+            'OK!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id
+        ));
 
         return new Response(
             'User with id ' . $sender_id . ' transferred ' . $money . ' rubles to user with id ' . $recipient_id,

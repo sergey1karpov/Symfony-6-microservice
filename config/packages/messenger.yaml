@@ -1,0 +1,28 @@
+framework:
+    messenger:
+        transports:
+            amqp:
+                dsn: "%env(RABBIT_DSN)%"
+                options:
+                    exchange:
+                        name: 'a.add.money'
+                        type: 'direct'
+                retry_strategy:
+                    max_retries: 3
+                    delay: 1000
+            amqp2:
+                dsn: "%env(RABBIT_DSN)%"
+                options:
+                    exchange:
+                        name: 'a.transfer.money'
+                        type: 'direct'
+                retry_strategy:
+                    max_retries: 3
+                    delay: 1000
+            async: # Добавленный получатель
+                dsn: "%env(RABBIT_DSN)%"
+                # Дополнительные настройки для получателя async
+
+        routing:
+            'App\Message\AddMoneyToBalanceNotification': amqp
+            'App\Message\TransferMoneyNotification': amqp2

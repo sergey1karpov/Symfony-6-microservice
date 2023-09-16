@@ -33,9 +33,9 @@ class AddUserMoneyTest extends WebTestCase
 
         $this->client->request('POST', '/api/v1/add-money', $data);
 
-        $response = $this->client->getResponse();
+        $user = $this->userRepository->findOneBy(['user_id' => 1]);
 
-        $this->assertSame(200, $response->getStatusCode());
+        $this->assertEquals(100, $user->getBalance());
     }
 
     public function testUpdateMoneyToUserBalance(): void
