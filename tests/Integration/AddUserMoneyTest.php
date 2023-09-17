@@ -2,7 +2,9 @@
 
 namespace App\Tests\Integration;
 
+use App\Entity\OrderService;
 use App\Entity\UserBalance;
+use App\Services\UserOrderService;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,6 +17,8 @@ class AddUserMoneyTest extends WebTestCase
 
     private $userRepository;
 
+    private $orderRepository;
+
     public function setUp(): void
     {
         parent::setUp();
@@ -25,6 +29,8 @@ class AddUserMoneyTest extends WebTestCase
         $this->em = $container->get('doctrine.orm.default_entity_manager');
 
         $this->userRepository = $this->em->getRepository(UserBalance::class);
+
+        $this->orderRepository = $this->em->getRepository(OrderService::class);
     }
 
     public function testAddMoneyToUserBalance(): void
@@ -106,8 +112,7 @@ class AddUserMoneyTest extends WebTestCase
         ]);
 
         $this->assertResponseStatusCodeSame(
-            Response::HTTP_BAD_REQUEST,
-            'There is not enough money in your account. Top up your account.'
+            Response::HTTP_BAD_REQUEST
         );
     }
 
@@ -133,5 +138,128 @@ class AddUserMoneyTest extends WebTestCase
         $this->client->request('POST', '/api/v1/get-balance', ['user_id' => 999]);
 
         $this->assertResponseStatusCodeSame(Response::HTTP_NOT_FOUND, 'User balance not found');
+    }
+
+    public function testCreateNewOrder(): void
+    {
+        $userBalance = new UserBalance();
+        $userBalance->setUserId(1);
+        $userBalance->setBalance(1000);
+        $this->em->persist($userBalance);
+        $this->em->flush();
+
+        $orderData = [
+            'user_id' => $userBalance->getUserId(),
+            'service_id' => 1,
+            'money' => 100
+        ];
+
+        $this->client->request('POST', '/api/v1/create-order', $orderData);
+
+        $userWallet = $this->userRepository->findOneBy(['user_id' => $userBalance->getUserId()]);
+        $order = $this->orderRepository->findOneBy(['user_id' => $userBalance->getUserId()]);
+
+        $this->assertEquals(900, $userWallet->getBalance());
+        $this->assertEquals(100, $userWallet->getHold());
+        $this->assertEquals(1, $order->getUserId());
+        $this->assertEquals(1, $order->getServiceId());
+        $this->assertEquals(100, $order->getMoney());
+        $this->assertEquals(100, $order->getMoney());
+    }
+
+    public function testCreateNewOrderIfNotMoney(): void
+    {
+        $userBalance = new UserBalance();
+        $userBalance->setUserId(1);
+        $userBalance->setBalance(1000);
+        $this->em->persist($userBalance);
+        $this->em->flush();
+
+        $orderData = [
+            'user_id' => $userBalance->getUserId(),
+            'service_id' => 1,
+            'money' => 1000000
+        ];
+
+        $this->client->request('POST', '/api/v1/create-order', $orderData);
+
+        $this->assertResponseStatusCodeSame(
+            Response::HTTP_BAD_REQUEST,
+            'There is not enough money in your account. Top up your account.'
+        );
+    }
+
+    public function testConfirmedOrder(): void
+    {
+        $userBalance = new UserBalance();
+        $userBalance->setUserId(1);
+        $userBalance->setBalance(1000);
+        $this->em->persist($userBalance);
+        $this->em->flush();
+
+        $orderData = [
+            'user_id' => $userBalance->getUserId(),
+            'service_id' => 1,
+            'money' => 100
+        ];
+
+        $this->client->request('POST', '/api/v1/create-order', $orderData);
+
+        $order = $this->orderRepository->findOneBy(['user_id' => $userBalance->getUserId()]);
+
+        $orderData = [
+            'order_uuid' => $order->getOrderUuid(),
+            'decision' => true
+        ];
+
+        $this->client->request('POST', '/api/v1/confirmed-order', $orderData);
+
+        $confirmedOrder = $this->orderRepository->findOneBy(['user_id' => $userBalance->getUserId()]);
+
+        $this->assertEquals(900, $userBalance->getBalance());
+        $this->assertEquals(100, $userBalance->getHold());
+        $this->assertEquals(UserOrderService::CONFIRMED, $confirmedOrder->getStatus());
+
+        $this->assertResponseStatusCodeSame(
+            Response::HTTP_OK,
+            'Your order # ' . $confirmedOrder->getOrderUuid() . ' was confirmed!'
+        );
+    }
+
+    public function testDoesntConfirmedOrder(): void
+    {
+        $userBalance = new UserBalance();
+        $userBalance->setUserId(1);
+        $userBalance->setBalance(1000);
+        $this->em->persist($userBalance);
+        $this->em->flush();
+
+        $orderData = [
+            'user_id' => $userBalance->getUserId(),
+            'service_id' => 1,
+            'money' => 100
+        ];
+
+        $this->client->request('POST', '/api/v1/create-order', $orderData);
+
+        $order = $this->orderRepository->findOneBy(['user_id' => $userBalance->getUserId()]);
+
+        $orderData = [
+            'order_uuid' => $order->getOrderUuid(),
+            'decision' => false
+        ];
+
+        $this->client->request('POST', '/api/v1/confirmed-order', $orderData);
+
+        $confirmedOrder = $this->orderRepository->findOneBy(['user_id' => $userBalance->getUserId()]);
+
+        $this->assertEquals(900, $userBalance->getBalance());
+        $this->assertEquals(100, $userBalance->getHold());
+        $this->assertEquals(UserOrderService::REJECTED, $confirmedOrder->getStatus());
+
+        $this->assertResponseStatusCodeSame(
+            Response::HTTP_OK,
+            'Your order # ' . $confirmedOrder->getOrderUuid() . ' was rejected by the administrator'
+        );
     }
 }

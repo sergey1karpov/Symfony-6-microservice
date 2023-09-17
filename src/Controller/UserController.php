@@ -9,7 +9,6 @@ use App\Message\TransferMoneyNotification;
 use App\Services\UserBalanceService;
 use App\Services\UserOrderService;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\TransactionRequiredException;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -80,7 +79,7 @@ class UserController extends AbstractController
 
         if ($senderWallet->getBalance() == 0 || $senderWallet->getBalance() < $money) {
             $bus->dispatch(new TransferMoneyNotification(
-                'FAIL!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id
+                'ggg'
             ));
 
             return new Response(
@@ -144,6 +143,8 @@ class UserController extends AbstractController
         }
 
         $this->userOrderService->createOrder($senderWallet, $request->get('service_id'), $money);
+
+        //Send mail to admin
 
         return new Response(
             'A user with id ' . $request->get('user_id') . ' placed an order for a service with id ' . $request->get('service_id') . ' in the amount of ' . $money . ' rubles',

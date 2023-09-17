@@ -84,7 +84,7 @@ class OrderService
         return $this;
     }
 
-    public function isStatus(): ?string
+    public function getStatus(): ?string
     {
         return $this->status;
     }

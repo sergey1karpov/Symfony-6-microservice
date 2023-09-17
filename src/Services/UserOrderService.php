@@ -10,11 +10,11 @@ use Symfony\Component\Uid\Uuid;
 
 class UserOrderService
 {
-    private const CONFIRMED = 'CONFIRM';
+    public const CONFIRMED = 'CONFIRM';
 
-    private const NOT_CONFIRMED = 'NOT CONFIRM';
+    public const NOT_CONFIRMED = 'NOT CONFIRM';
 
-    private const REJECTED = 'REJECTED';
+    public const REJECTED = 'REJECTED';
 
     public function __construct(
         private EntityManagerInterface $entityManager,
