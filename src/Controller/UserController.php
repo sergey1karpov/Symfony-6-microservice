@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Entity\OrderService;
 use App\Entity\UserBalance;
 use App\Message\AddMoneyToBalanceNotification;
 use App\Message\TransferMoneyNotification;
@@ -123,7 +124,7 @@ class UserController extends AbstractController
         return new JsonResponse($user->getBalance(), Response::HTTP_OK);
     }
 
-    #[Route('/api/v1/payment-service', name: 'payment-service')]
+    #[Route('/api/v1/create-order', name: 'create-order')]
     public function paymentForService(Request $request): Response
     {
         $money = $request->get('money');
@@ -142,20 +143,7 @@ class UserController extends AbstractController
             );
         }
 
-        $this->entityManager->beginTransaction();
-
-        try {
-            $this->userOrderService->createOrder($senderWallet, $request->get('service_id'), $money);
-
-            $senderWallet->setBalance($senderWallet->getBalance() - $money);
-            $senderWallet->setHold($senderWallet->getHold() + $money);
-
-            $this->entityManager->flush();
-            $this->entityManager->commit();
-        } catch (\Exception $e) {
-            $this->entityManager->rollback();
-            throw $e;
-        }
+        $this->userOrderService->createOrder($senderWallet, $request->get('service_id'), $money);
 
         return new Response(
             'A user with id ' . $request->get('user_id') . ' placed an order for a service with id ' . $request->get('service_id') . ' in the amount of ' . $money . ' rubles',
@@ -166,6 +154,32 @@ class UserController extends AbstractController
     #[Route('/api/v1/confirmed-order', name: 'confirmed-order')]
     public function confirmedOrder(Request $request): Response
     {
+        $decision = (boolean) $request->get('decision');
 
+        $order = $this->entityManager->getRepository(OrderService::class)
+            ->findOneBy(['order_uuid' => $request->get('order_uuid')]);
+
+        if (!$order) {
+            throw new NotFoundHttpException('Order not found');
+        }
+
+        $userWallet = $this->entityManager->getRepository(UserBalance::class)
+            ->findOneBy(['user_id' => $order->getUserId()]);
+
+        if (!$decision) {
+            $this->userOrderService->rejectedOrder($userWallet, $order);
+
+            return new Response(
+                'Your order # ' . $order->getOrderUuid() . ' was rejected by the administrator',
+                Response::HTTP_OK
+            );
+        }
+
+        $this->userOrderService->confirmedOrder($userWallet, $order);
+
+        return new Response(
+            'Your order # ' . $order->getOrderUuid() . ' was confirmed!',
+            Response::HTTP_OK
+        );
     }
 }

@@ -25,8 +25,8 @@ class OrderService
     #[ORM\Column(length: 255)]
     private ?string $order_uuid = null;
 
-    #[ORM\Column]
-    private ?bool $status = null;
+    #[ORM\Column(length: 50)]
+    private ?string $status = null;
 
     #[ORM\Column]
     private ?\DateTimeImmutable $created_at = null;
@@ -84,12 +84,12 @@ class OrderService
         return $this;
     }
 
-    public function isStatus(): ?bool
+    public function isStatus(): ?string
     {
         return $this->status;
     }
 
-    public function setStatus(bool $status): static
+    public function setStatus(string $status): static
     {
         $this->status = $status;
 

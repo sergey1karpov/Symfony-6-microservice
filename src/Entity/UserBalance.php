@@ -20,7 +20,7 @@ class UserBalance
     private ?float $balance = null;
 
     #[ORM\Column(nullable: true)]
-    private ?float $hold = null;
+    private ?float $hold = 0;
 
     public function getId(): ?int
     {

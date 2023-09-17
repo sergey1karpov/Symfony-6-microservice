@@ -5,15 +5,21 @@ namespace App\Services;
 use App\Entity\OrderService;
 use App\Entity\UserBalance;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Uid\Uuid;
 
 class UserOrderService
 {
-    private const CONFIRMED = true;
+    private const CONFIRMED = 'CONFIRM';
 
-    private const NOT_CONFIRMED = false;
+    private const NOT_CONFIRMED = 'NOT CONFIRM';
 
-    public function __construct(private EntityManagerInterface $entityManager) {}
+    private const REJECTED = 'REJECTED';
+
+    public function __construct(
+        private EntityManagerInterface $entityManager,
+        private LoggerInterface $logger
+    ) {}
 
     /**
      * @param UserBalance $user
@@ -23,15 +29,67 @@ class UserOrderService
      */
     public function createOrder(UserBalance $user, int $service_id, int $money): void
     {
-        $holdOrder = new OrderService();
-        $holdOrder->setUserId($user->getUserId());
-        $holdOrder->setServiceId($service_id);
-        $holdOrder->setMoney($money);
-        $holdOrder->setOrderUuid(Uuid::v4());
-        $holdOrder->setStatus(self::NOT_CONFIRMED);
-        $holdOrder->setCreatedAt(new \DateTimeImmutable());
+        $this->entityManager->beginTransaction();
 
-        $this->entityManager->persist($holdOrder);
-        $this->entityManager->flush();
+        try {
+            $holdOrder = new OrderService();
+            $holdOrder->setUserId($user->getUserId());
+            $holdOrder->setServiceId($service_id);
+            $holdOrder->setMoney($money);
+            $holdOrder->setOrderUuid(Uuid::v4());
+            $holdOrder->setStatus(self::NOT_CONFIRMED);
+            $holdOrder->setCreatedAt(new \DateTimeImmutable());
+            $this->entityManager->persist($holdOrder);
+
+            $user->setBalance($user->getBalance() - $money);
+            $user->setHold($user->getHold() + $money);
+
+            $this->entityManager->flush();
+            $this->entityManager->commit();
+        } catch (\Exception $e) {
+            $this->entityManager->rollback();
+            $this->logger->error($e->getMessage());
+        }
+    }
+
+    /**
+     * @param UserBalance $userBalance
+     * @param OrderService $order
+     * @return void
+     */
+    public function confirmedOrder(UserBalance $userBalance, OrderService $order): void
+    {
+        $this->entityManager->beginTransaction();
+
+        try {
+            $userBalance->setHold($userBalance->getHold() - $order->getMoney());
+            $order->setStatus(self::CONFIRMED);
+            $this->entityManager->flush();
+            $this->entityManager->commit();
+        } catch (\Exception $e) {
+            $this->entityManager->rollback();
+            $this->logger->error($e->getMessage());
+        }
+    }
+
+    /**
+     * @param UserBalance $userBalance
+     * @param OrderService $order
+     * @return void
+     */
+    public function rejectedOrder(UserBalance $userBalance, OrderService $order): void
+    {
+        $this->entityManager->beginTransaction();
+
+        try {
+            $userBalance->setHold($userBalance->getHold() - $order->getMoney());
+            $userBalance->setBalance($userBalance->getBalance() + $order->getMoney());
+            $order->setStatus(self::REJECTED);
+            $this->entityManager->flush();
+            $this->entityManager->commit();
+        } catch (\Exception $e) {
+            $this->entityManager->rollback();
+            $this->logger->error($e->getMessage());
+        }
     }
 }
