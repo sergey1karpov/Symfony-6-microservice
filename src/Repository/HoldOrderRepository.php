@@ -3,8 +3,13 @@
 namespace App\Repository;
 
 use App\Entity\OrderService;
+use App\Services\UserOrderService;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Knp\Bundle\PaginatorBundle\Pagination\SlidingPagination;
+use Knp\Component\Pager\Pagination\PaginationInterface;
+use Knp\Component\Pager\PaginatorInterface;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * @extends ServiceEntityRepository<OrderService>
@@ -16,9 +21,12 @@ use Doctrine\Persistence\ManagerRegistry;
  */
 class HoldOrderRepository extends ServiceEntityRepository
 {
-    public function __construct(ManagerRegistry $registry)
+    private $paginator;
+
+    public function __construct(ManagerRegistry $registry, PaginatorInterface $paginator)
     {
         parent::__construct($registry, OrderService::class);
+        $this->paginator = $paginator;
     }
 
     public function getSum(int $year, int $month, string $service_id): array
@@ -37,6 +45,19 @@ class HoldOrderRepository extends ServiceEntityRepository
             ->setParameter('end_date', $endDate)
             ->getQuery()
             ->getResult();
+    }
+
+    public function getServiceTransactions(Request $request): PaginationInterface
+    {
+        $qb = $this->createQueryBuilder('o')
+            ->andWhere('o.user_id = :user_id')
+            ->andWhere('o.status = :status')
+            ->setParameter('user_id', $request->get('user_id'))
+            ->setParameter('status', UserOrderService::CONFIRMED)
+            ->getQuery()
+            ->getResult();
+
+        return $this->paginator->paginate($qb, $request->get('page'), 2);
     }
 
 //    /**

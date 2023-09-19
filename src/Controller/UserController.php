@@ -8,6 +8,7 @@ use App\Message\AddMoneyToBalanceNotification;
 use App\Message\CreateCSVFileNotification;
 use App\Message\TransferMoneyNotification;
 use App\Repository\HoldOrderRepository;
+use App\Repository\UserBalanceRepository;
 use App\Services\UserBalanceService;
 use App\Services\UserOrderService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -19,6 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Serializer\SerializerInterface;
 
 class UserController extends AbstractController
 {
@@ -26,6 +28,7 @@ class UserController extends AbstractController
         private EntityManagerInterface $entityManager,
         private UserOrderService       $userOrderService,
         private UserBalanceService     $userBalanceService,
+        private SerializerInterface    $serializer
     ) {}
 
     #[Route('/api/v1/add-money', name: 'add-money')]
@@ -209,8 +212,14 @@ class UserController extends AbstractController
         );
     }
 
-    public function getUserServiceTransactions(Request $request): void
+    #[Route('/api/v1/get-transactions', name: 'get-transactions')]
+    public function getUserServiceTransactions(Request $request, HoldOrderRepository $repository): JsonResponse
     {
+        $row = $repository->getServiceTransactions($request);
 
+        return new JsonResponse(
+            $this->serializer->serialize($row->getItems(), 'json'),
+            Response::HTTP_OK
+        );
     }
 }
