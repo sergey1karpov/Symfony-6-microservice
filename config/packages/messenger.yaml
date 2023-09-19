@@ -19,6 +19,15 @@ framework:
                 retry_strategy:
                     max_retries: 3
                     delay: 1000
+            csv:
+                dsn: "%env(RABBIT_DSN)%"
+                options:
+                    exchange:
+                        name: 'a.create.csv'
+                        type: 'direct'
+                retry_strategy:
+                    max_retries: 3
+                    delay: 1000
             async: # Добавленный получатель
                 dsn: "%env(RABBIT_DSN)%"
                 # Дополнительные настройки для получателя async
@@ -26,3 +35,4 @@ framework:
         routing:
             'App\Message\AddMoneyToBalanceNotification': amqp
             'App\Message\TransferMoneyNotification': amqp2
+            'App\Message\CreateCSVFileNotification': csv

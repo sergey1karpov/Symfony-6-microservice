@@ -5,10 +5,13 @@ namespace App\Controller;
 use App\Entity\OrderService;
 use App\Entity\UserBalance;
 use App\Message\AddMoneyToBalanceNotification;
+use App\Message\CreateCSVFileNotification;
 use App\Message\TransferMoneyNotification;
+use App\Repository\HoldOrderRepository;
 use App\Services\UserBalanceService;
 use App\Services\UserOrderService;
 use Doctrine\ORM\EntityManagerInterface;
+use League\Csv\Writer;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -182,5 +185,32 @@ class UserController extends AbstractController
             'Your order # ' . $order->getOrderUuid() . ' was confirmed!',
             Response::HTTP_OK
         );
+    }
+
+    #[Route('/api/v1/get-sum', name: 'get-sum')]
+    public function getProfitSumForService(Request $request, HoldOrderRepository $repository, MessageBusInterface $bus): Response
+    {
+        $sum = $repository->getSum(
+            $request->get('year'),
+            $request->get('month'),
+            $request->get('service_id')
+        );
+
+        $bus->dispatch(new CreateCSVFileNotification(
+            $sum,
+            $request->get('year'),
+            $request->get('month'),
+            $request->get('service_id')
+        ));
+
+        return new Response(
+            'CSV File generated and sending to administrator email',
+            Response::HTTP_OK
+        );
+    }
+
+    public function getUserServiceTransactions(Request $request): void
+    {
+
     }
 }
