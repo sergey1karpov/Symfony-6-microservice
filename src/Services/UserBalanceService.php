@@ -22,4 +22,31 @@ class UserBalanceService
         $this->entityManager->persist($userBalance);
         $this->entityManager->flush();
     }
+
+    /**
+     * @param UserBalance $balance
+     * @param int $money
+     * @return void
+     */
+    public function updateMoney(UserBalance $balance, int $money): void
+    {
+        $currentBalance = $balance->getBalance();
+        $newBalance = $balance->setBalance($money + $currentBalance);
+        $this->entityManager->persist($newBalance);
+        $this->entityManager->flush();
+    }
+
+    /**
+     * @param UserBalance $senderWallet
+     * @param UserBalance $recipientWallet
+     * @param int $money
+     * @return void
+     */
+    public function sendMoneyToUserFromUser(UserBalance $senderWallet, UserBalance $recipientWallet, int $money): void
+    {
+        $senderWallet->setBalance($senderWallet->getBalance() - $money);
+        $recipientWallet->setBalance($recipientWallet->getBalance() + $money);
+        $this->entityManager->flush();
+        $this->entityManager->commit();
+    }
 }
