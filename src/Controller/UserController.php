@@ -21,6 +21,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Serializer\SerializerInterface;
+use Nelmio\ApiDocBundle\Annotation\Model;
+use Nelmio\ApiDocBundle\Annotation\Security;
+use OpenApi\Annotations as OA;
 
 class UserController extends AbstractController
 {
@@ -32,11 +35,36 @@ class UserController extends AbstractController
         private MessageBusInterface    $bus
     ) {}
 
-    #[Route('/api/v1/add-money', name: 'add-money')]
+    /**
+     * Add money to user balance
+     *
+     * @Route("/api/v1/add-money", methods={"POST"})
+     * @OA\Response(
+     *     response=200,
+     *     description="Returns the confirmed message",
+     *     @OA\JsonContent(
+     *        type="array",
+     *        @OA\Items(ref=@Model(type=UserBalance::class, groups={"full"}))
+     *     )
+     * )
+     * @OA\Parameter(
+     *     name="user_id",
+     *     in="query",
+     *     description="User ID",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Parameter(
+     *     name="money",
+     *     in="query",
+     *     description="Money",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Tag(name="API for work with user balance")
+     */
     public function addBalance(Request $request): Response
     {
-        $user  = $request->get('user_id');
-        $money = $request->get('money');
+        $user  = (integer) $request->get('user_id');
+        $money = (integer) $request->get('money');
 
         $balance = $this->entityManager->getRepository(UserBalance::class)
             ->findOneBy(['user_id' => $user]);
@@ -64,23 +92,51 @@ class UserController extends AbstractController
         return new Response('Balance replenished by ' . $money, Response::HTTP_OK);
     }
 
-    #[Route('/api/v1/transfer-money', name: 'transfer-money')]
+    /**
+     * Transfer money from user to user
+     *
+     * @Route("/api/v1/transfer-money", methods={"POST"})
+     * @OA\Response(
+     *     response=200,
+     *     description="Returns the confirmed message",
+     *     @OA\JsonContent(
+     *        type="array",
+     *        @OA\Items(ref=@Model(type=UserBalance::class, groups={"full"}))
+     *     )
+     * )
+     * @OA\Parameter(
+     *     name="sender_id",
+     *     in="query",
+     *     description="Sender ID",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Parameter(
+     *     name="recipient_id",
+     *     in="query",
+     *     description="Recipient ID",
+     *     @OA\Schema(type="integer")
+     *  )
+     * @OA\Parameter(
+     *     name="money",
+     *     in="query",
+     *     description="Money",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Tag(name="API for work with user balance")
+     */
     public function sendMoneyFromUserToUser(Request $request): Response
     {
-        $sender_id    = $request->get('sender_id');
-        $recipient_id = $request->get('recipient_id');
-        $money        = $request->get('money');
-
         $senderWallet = $this->entityManager->getRepository(UserBalance::class)
-            ->findOneBy(['user_id' => $sender_id]);
+            ->findOneBy(['user_id' => (integer) $request->get('sender_id')]);
+
         $recipientWallet = $this->entityManager->getRepository(UserBalance::class)
-            ->findOneBy(['user_id' => $recipient_id]);
+            ->findOneBy(['user_id' => (integer) $request->get('recipient_id')]);
 
         if (!$senderWallet || !$recipientWallet) {
             throw new NotFoundHttpException('User not found');
         }
 
-        if ($senderWallet->getBalance() == 0 || $senderWallet->getBalance() < $money) {
+        if ($senderWallet->getBalance() == 0 || $senderWallet->getBalance() < (integer) $request->get('money')) {
             $this->bus->dispatch(new TransferMoneyNotification(
                 'ggg'
             ));
@@ -91,30 +147,50 @@ class UserController extends AbstractController
             );
         }
 
-        $this->entityManager->beginTransaction();
-
-        try {
-            $this->userBalanceService->sendMoneyToUserFromUser($senderWallet, $recipientWallet, $money);
-        } catch (\Exception $e) {
-            $this->entityManager->rollback();
-            throw $e;
-        }
+        $this->userBalanceService->sendMoneyToUserFromUser(
+            $senderWallet,
+            $recipientWallet,
+            (integer) $request->get('money')
+        );
 
         $this->bus->dispatch(new TransferMoneyNotification(
-            'OK!. Transfer of the amount ' . $money . ' from a user with id ' . $sender_id . ' => to a user with id ' . $recipient_id
+            'OK!. Transfer of the amount ' . $request->get('money') .
+            ' from a user with id ' . $senderWallet->getUserId() . ' => to a user with id ' .
+            $recipientWallet->getUserId()
         ));
 
         return new Response(
-            'User with id ' . $sender_id . ' transferred ' . $money . ' rubles to user with id ' . $recipient_id,
+            'User with id ' . $senderWallet->getUserId() . ' transferred ' .
+            $request->get('money') . ' rubles to user with id ' . $recipientWallet->getUserId(),
             Response::HTTP_OK
         );
     }
 
-    #[Route('/api/v1/get-balance', name: 'get-balance')]
+
+    /**
+     * Get user balance
+     *
+     * @Route("/api/v1/get-balance", methods={"POST"})
+     * @OA\Response(
+     *     response=200,
+     *     description="Get user balance",
+     *     @OA\JsonContent(
+     *        type="array",
+     *        @OA\Items(ref=@Model(type=UserBalance::class, groups={"full"}))
+     *     )
+     * )
+     * @OA\Parameter(
+     *     name="user_id",
+     *     in="query",
+     *     description="User ID",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Tag(name="API for work with user balance")
+     */
     public function getUserBalance(Request $request): JsonResponse
     {
         $user = $this->entityManager->getRepository(UserBalance::class)
-            ->findOneBy(['user_id' => $request->get('user_id')]);
+            ->findOneBy(['user_id' => (integer) $request->get('user_id')]);
 
         if (!$user) {
             throw new NotFoundHttpException('User balance not found');
@@ -123,42 +199,103 @@ class UserController extends AbstractController
         return new JsonResponse($user->getBalance(), Response::HTTP_OK);
     }
 
-    #[Route('/api/v1/create-order', name: 'create-order')]
+    /**
+     * Payment for service
+     *
+     * @Route("/api/v1/create-order", methods={"POST"})
+     * @OA\Response(
+     *     response=200,
+     *     description="Payment for service",
+     *     @OA\JsonContent(
+     *        type="array",
+     *        @OA\Items(ref=@Model(type=UserBalance::class, groups={"full"}))
+     *     )
+     * )
+     * @OA\Parameter(
+     *     name="user_id",
+     *     in="query",
+     *     description="User ID",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Parameter(
+     *     name="service_id",
+     *     in="query",
+     *     description="Service ID",
+     *     @OA\Schema(type="integer")
+     *  )
+     * @OA\Parameter(
+     *     name="money",
+     *     in="query",
+     *     description="Money",
+     *     @OA\Schema(type="integer")
+     *   )
+     * @OA\Tag(name="API for work with user balance")
+     */
     public function paymentForService(Request $request): Response
     {
-        $money = $request->get('money');
-
         $senderWallet = $this->entityManager->getRepository(UserBalance::class)
-            ->findOneBy(['user_id' => $request->get('user_id')]);
+            ->findOneBy(['user_id' => (integer) $request->get('user_id')]);
 
         if (!$senderWallet) {
             throw new NotFoundHttpException('User not found');
         }
 
-        if ($senderWallet->getBalance() == 0 || $senderWallet->getBalance() < $money) {
+        if ($senderWallet->getBalance() == 0 || $senderWallet->getBalance() < (integer) $request->get('money')) {
             return new Response(
                 'There is not enough money in your account. Top up your account.',
                 Response::HTTP_BAD_REQUEST
             );
         }
 
-        $this->userOrderService->createOrder($senderWallet, $request->get('service_id'), $money);
+        $this->userOrderService->createOrder($senderWallet, (integer) $request->get('service_id'), (integer) $request->get('money'));
 
         //Send mail to admin!?
 
         return new Response(
-            'A user with id ' . $request->get('user_id') . ' placed an order for a service with id ' . $request->get('service_id') . ' in the amount of ' . $money . ' rubles',
+            'A user with id ' . $request->get('user_id') . ' placed an order for a service with id ' .
+            $request->get('service_id') . ' in the amount of ' . $request->get('money') . ' rubles',
             Response::HTTP_OK
         );
     }
 
-    #[Route('/api/v1/confirmed-order', name: 'confirmed-order')]
+    /**
+     * Confirm user order
+     *
+     * @Route("/api/v1/confirmed-order", methods={"POST"})
+     * @OA\Response(
+     *     response=200,
+     *     description="Confirm user order",
+     *     @OA\JsonContent(
+     *        type="array",
+     *        @OA\Items(ref=@Model(type=UserBalance::class, groups={"full"}))
+     *     )
+     * )
+     * @OA\Parameter(
+     *     name="user_id",
+     *     in="query",
+     *     description="User ID",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Parameter(
+     *     name="order_uuid",
+     *     in="query",
+     *     description="Order ID/UUID",
+     *     @OA\Schema(type="string")
+     *  )
+     * @OA\Parameter(
+     *     name="decision",
+     *     in="query",
+     *     description="Decision for order",
+     *     @OA\Schema(type="boolean")
+     *  )
+     * @OA\Tag(name="API for work with user balance")
+     */
     public function confirmedOrder(Request $request): Response
     {
         $decision = (boolean) $request->get('decision');
 
         $order = $this->entityManager->getRepository(OrderService::class)
-            ->findOneBy(['order_uuid' => $request->get('order_uuid')]);
+            ->findOneBy(['order_uuid' => (string) $request->get('order_uuid')]);
 
         if (!$order) {
             throw new NotFoundHttpException('Order not found');
@@ -184,20 +321,51 @@ class UserController extends AbstractController
         );
     }
 
-    #[Route('/api/v1/get-sum', name: 'get-sum')]
+    /**
+     * Get sum for services transaction per year/month
+     *
+     * @Route("/api/v1/get-sum", methods={"POST"})
+     * @OA\Response(
+     *     response=200,
+     *     description="Get sum for services transaction per year/month",
+     *     @OA\JsonContent(
+     *        type="array",
+     *        @OA\Items(ref=@Model(type=UserBalance::class, groups={"full"}))
+     *     )
+     * )
+     * @OA\Parameter(
+     *     name="service_id",
+     *     in="query",
+     *     description="Service ID",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Parameter(
+     *     name="year",
+     *     in="query",
+     *     description="Year",
+     *     @OA\Schema(type="integer")
+     *  )
+     * @OA\Parameter(
+     *     name="month",
+     *     in="query",
+     *     description="Month(01-12)",
+     *     @OA\Schema(type="integer")
+     *  )
+     * @OA\Tag(name="API for work with user balance")
+     */
     public function getProfitSumForService(Request $request, HoldOrderRepository $repository): Response
     {
         $sum = $repository->getSum(
-            $request->get('year'),
-            $request->get('month'),
-            $request->get('service_id')
+            (integer) $request->get('year'),
+            (integer) $request->get('month'),
+            (integer) $request->get('service_id')
         );
 
         $this->bus->dispatch(new CreateCSVFileNotification(
             $sum,
-            $request->get('year'),
-            $request->get('month'),
-            $request->get('service_id')
+            (integer) $request->get('year'),
+            (integer) $request->get('month'),
+            (integer) $request->get('service_id')
         ));
 
         return new Response(
@@ -206,7 +374,32 @@ class UserController extends AbstractController
         );
     }
 
-    #[Route('/api/v1/get-transactions', name: 'get-transactions')]
+    /**
+     * Get user transactions
+     *
+     * @Route("/api/v1/get-transactions", methods={"POST"})
+     * @OA\Response(
+     *     response=200,
+     *     description="Get user balance",
+     *     @OA\JsonContent(
+     *        type="array",
+     *        @OA\Items(ref=@Model(type=UserBalance::class, groups={"full"}))
+     *     )
+     * )
+     * @OA\Parameter(
+     *     name="user_id",
+     *     in="query",
+     *     description="User ID",
+     *     @OA\Schema(type="integer")
+     * )
+     * @OA\Parameter(
+     *     name="page",
+     *     in="query",
+     *     description="Page number",
+     *     @OA\Schema(type="integer")
+     *  )
+     * @OA\Tag(name="API for work with user balance")
+     */
     public function getUserServiceTransactions(Request $request, HoldOrderRepository $repository): JsonResponse
     {
         $row = $repository->getServiceTransactions($request);

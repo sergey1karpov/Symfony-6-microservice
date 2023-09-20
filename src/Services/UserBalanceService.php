@@ -41,12 +41,20 @@ class UserBalanceService
      * @param UserBalance $recipientWallet
      * @param int $money
      * @return void
+     * @throws \Exception
      */
     public function sendMoneyToUserFromUser(UserBalance $senderWallet, UserBalance $recipientWallet, int $money): void
     {
-        $senderWallet->setBalance($senderWallet->getBalance() - $money);
-        $recipientWallet->setBalance($recipientWallet->getBalance() + $money);
-        $this->entityManager->flush();
-        $this->entityManager->commit();
+        $this->entityManager->beginTransaction();
+
+        try {
+            $senderWallet->setBalance($senderWallet->getBalance() - $money);
+            $recipientWallet->setBalance($recipientWallet->getBalance() + $money);
+            $this->entityManager->flush();
+            $this->entityManager->commit();
+        } catch (\Exception $e) {
+            $this->entityManager->rollback();
+            throw $e;
+        }
     }
 }

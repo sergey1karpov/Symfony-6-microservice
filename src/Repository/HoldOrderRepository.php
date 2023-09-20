@@ -52,12 +52,12 @@ class HoldOrderRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('o')
             ->andWhere('o.user_id = :user_id')
             ->andWhere('o.status = :status')
-            ->setParameter('user_id', $request->get('user_id'))
+            ->setParameter('user_id', (integer) $request->get('user_id'))
             ->setParameter('status', UserOrderService::CONFIRMED)
             ->getQuery()
             ->getResult();
 
-        return $this->paginator->paginate($qb, $request->get('page'), 2);
+        return $this->paginator->paginate($qb, (integer) $request->get('page'), 2);
     }
 
 //    /**
